@@ -13,12 +13,15 @@
     "test": "npm test -w server",
     "typecheck": "npm run typecheck -w server && npm run typecheck -w web",
     "seed": "npm run seed -w server",
-    "db:generate": "npm run db:generate -w server"
+    "db:generate": "npm run db:generate -w server",
+    "e2e": "playwright test",
+    "test:pg": "npm run test:pg -w server"
   },
   "engines": {
     "node": ">=22"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.1",
     "@types/node": "^22.20.5",
     "@types/pg": "^8.23.1",
     "concurrently": "^10.0.6",

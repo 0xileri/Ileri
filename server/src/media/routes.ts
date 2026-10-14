@@ -128,7 +128,8 @@ export async function mediaRoutes(app: FastifyInstance) {
     reply
       .header('Content-Type', file.mimeType)
       .header('X-Content-Type-Options', 'nosniff')
-      .header('Content-Security-Policy', "default-src 'none'; sandbox")
+      // Sandbox neutralises anything script-like; Chrome's PDF viewer refuses sandboxed documents.
+      .header('Content-Security-Policy', file.mimeType === 'application/pdf' ? "default-src 'none'" : "default-src 'none'; sandbox")
       .header('Cache-Control', 'private, max-age=600')
       .header('Accept-Ranges', 'bytes')
       .header(

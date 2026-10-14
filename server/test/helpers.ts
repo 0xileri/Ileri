@@ -10,12 +10,40 @@ import type { CourseContentInput } from '../../shared/src/content';
 
 export { ApiClient };
 
+/**
+ * Embedded PGlite by default. Set TEST_DATABASE_URL to run against real Postgres:
+ * each app gets its own throwaway database, created here and dropped on close.
+ */
+async function testDatabase(): Promise<{ databaseUrl: string | null; drop: () => Promise<void> }> {
+  const adminUrl = process.env.TEST_DATABASE_URL;
+  if (!adminUrl) return { databaseUrl: null, drop: async () => {} };
+  const { default: pg } = await import('pg');
+  const name = `ileri_test_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const admin = new pg.Client({ connectionString: adminUrl });
+  await admin.connect();
+  await admin.query(`create database ${name}`);
+  await admin.end();
+  const url = new URL(adminUrl);
+  url.pathname = `/${name}`;
+  return {
+    databaseUrl: url.toString(),
+    drop: async () => {
+      const client = new pg.Client({ connectionString: adminUrl });
+      await client.connect();
+      await client.query(`drop database if exists ${name} with (force)`);
+      await client.end();
+    },
+  };
+}
+
 export async function makeApp(config: Partial<Config> = {}): Promise<FastifyInstance> {
   const uploadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ileri-test-'));
+  const database = await testDatabase();
   const app = await buildApp({
     config: {
       env: 'test',
       pgliteDir: 'memory://',
+      databaseUrl: database.databaseUrl,
       uploadDir,
       devMode: true,
       chainMode: 'mock',
@@ -25,7 +53,12 @@ export async function makeApp(config: Partial<Config> = {}): Promise<FastifyInst
       ...config,
     },
   });
-  app.addHook('onClose', async () => fs.rmSync(uploadDir, { recursive: true, force: true }));
+  app.addHook('onClose', async () => {
+    fs.rmSync(uploadDir, { recursive: true, force: true });
+    // Close the pool before dropping its database; closing is idempotent.
+    await app.ctx.database.close();
+    await database.drop();
+  });
   return app;
 }
 

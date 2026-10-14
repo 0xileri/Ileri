@@ -75,7 +75,7 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
 
   const app = Fastify({
     logger: options.logger ?? false,
-    trustProxy: true,
+    trustProxy: config.trustProxy,
     bodyLimit: 2 * 1024 * 1024,
   });
   app.decorate('ctx', ctx);
@@ -93,6 +93,32 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
       throw new AppError(403, 'bad_origin', 'Request origin is not allowed.');
     }
     req.user = await resolveSession(ctx.db, req.cookies[SESSION_COOKIE]);
+  });
+
+  // Baseline security headers. The app shell also gets a CSP; private media sets its own.
+  const shellCsp = [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: https:",
+    "media-src 'self' https:",
+    'frame-src https://www.youtube-nocookie.com https://player.vimeo.com',
+    "connect-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join('; ');
+  app.addHook('onSend', async (req, reply, payload) => {
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+    reply.header('X-Frame-Options', 'DENY');
+    const type = String(reply.getHeader('content-type') ?? '');
+    if (type.startsWith('text/html') && !reply.getHeader('content-security-policy')) {
+      reply.header('Content-Security-Policy', shellCsp);
+    }
+    if (req.url.startsWith('/api/')) reply.header('Cache-Control', 'no-store');
+    return payload;
   });
 
   app.setErrorHandler((error, req, reply) => {
@@ -129,7 +155,7 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
   const indexHtml = path.join(config.webDistDir, 'index.html');
   const hasWeb = fs.existsSync(indexHtml);
   if (hasWeb) {
-    await app.register(fastifyStatic, { root: config.webDistDir, wildcard: false, index: false });
+    await app.register(fastifyStatic, { root: config.webDistDir, index: 'index.html' });
   }
   app.setNotFoundHandler((req, reply) => {
     if (req.url.startsWith('/api/') || req.url.startsWith('/media/') || req.method !== 'GET' || !hasWeb) {

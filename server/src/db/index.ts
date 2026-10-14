@@ -27,7 +27,7 @@ export async function openDatabase(config: Pick<Config, 'databaseUrl' | 'pgliteD
       db: db as unknown as Db,
       kind: 'postgres',
       ping: () => ping(db as unknown as Db),
-      close: () => pool.end(),
+      close: once(() => pool.end()),
     };
   }
 
@@ -42,8 +42,13 @@ export async function openDatabase(config: Pick<Config, 'databaseUrl' | 'pgliteD
     db: db as unknown as Db,
     kind: 'pglite',
     ping: () => ping(db as unknown as Db),
-    close: () => client.close(),
+    close: once(() => client.close()),
   };
+}
+
+function once(fn: () => Promise<void>): () => Promise<void> {
+  let pending: Promise<void> | null = null;
+  return () => (pending ??= fn());
 }
 
 async function ping(db: Db): Promise<boolean> {

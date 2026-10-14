@@ -1,9 +1,17 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // src/ in development, dist/ when bundled. Both sit directly under server/.
 export const SERVER_ROOT = path.resolve(here, '..');
+
+// Load .env from the repo root or server/ (real environment variables win). Tests stay hermetic.
+if (process.env.NODE_ENV !== 'test') {
+  for (const file of [path.resolve(SERVER_ROOT, '..', '.env'), path.resolve(SERVER_ROOT, '.env')]) {
+    if (fs.existsSync(file)) process.loadEnvFile(file);
+  }
+}
 
 function bool(value: string | undefined, fallback: boolean): boolean {
   if (value === undefined || value === '') return fallback;
@@ -47,6 +55,8 @@ export interface Config {
   sessionDays: number;
   webDistDir: string;
   jobsEnabled: boolean;
+  /** Trust X-Forwarded-* headers. Enable only behind a proxy you control. */
+  trustProxy: boolean;
 }
 
 export function loadConfig(overrides: Partial<Config> = {}): Config {
@@ -94,8 +104,15 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     sessionDays: int(process.env.SESSION_DAYS, 30),
     webDistDir: process.env.WEB_DIST_DIR ?? path.resolve(SERVER_ROOT, '..', 'web', 'dist'),
     jobsEnabled: bool(process.env.JOBS_ENABLED, true),
+    trustProxy: bool(process.env.TRUST_PROXY, false),
     ...overrides,
   };
+  if (config.env === 'production' && config.devMode) {
+    throw new Error('DEV_MODE cannot be enabled in production: it exposes test wallets and simulated balances.');
+  }
+  if (config.env === 'production' && config.chainMode === 'mock' && process.env.ALLOW_MOCK_CHAIN !== 'true') {
+    throw new Error('CHAIN_MODE=mock in production would treat every wallet as holding nothing. Use CHAIN_MODE=rpc.');
+  }
   if (config.chainMode === 'rpc') {
     for (const id of config.supportedChainIds) {
       if (!config.rpcUrls[id]) throw new Error(`RPC_URL_${id} is required when CHAIN_MODE=rpc`);

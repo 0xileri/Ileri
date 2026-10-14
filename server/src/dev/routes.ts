@@ -2,7 +2,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { MockChainReader } from '../chain/mockReader';
-import { devBalances } from '../db/schema';
+import { balanceCache, devBalances } from '../db/schema';
 import { badRequest, forbidden } from '../lib/errors';
 import { parse } from '../lib/validate';
 import { requireUser, userWallets } from '../permissions';
@@ -76,6 +76,8 @@ export async function devRoutes(app: FastifyInstance) {
     const { down } = parse(z.object({ down: z.boolean() }), req.body);
     if (!(ctx.chain instanceof MockChainReader)) throw badRequest('Outage simulation only works with CHAIN_MODE=mock.');
     ctx.chain.down = down;
+    // Drop cached balances so the simulated outage is felt on the next check, not after the cache expires.
+    await ctx.db.delete(balanceCache);
     return { ok: true, down };
   });
 }

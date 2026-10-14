@@ -167,6 +167,14 @@ describe('verified completion', () => {
     expect(verified.verification.valid).toBe(true);
     expect(verified.credential).toMatchObject({ recipientName: 'Learner Lee', courseTitle: 'Course', versionNumber: 1 });
 
+    const stats = await owner.ok('GET', `/api/communities/${communityId}/analytics`);
+    expect(stats.summary).toMatchObject({ enrollments: 1, completions: 1, completionRate: 100, learners: 1 });
+    expect(stats.assessments).toMatchObject({ submissionsApproved: 1, submissionsSentBack: 1, quizPassRate: 100 });
+    expect(stats.integrity.credentialsActive).toBe(1);
+    expect(stats.courses[0]).toMatchObject({ enrollments: 1, completions: 1, completionRate: 100 });
+    expect(stats.weekly).toHaveLength(8);
+    expect(stats.weekly.at(-1)).toMatchObject({ enrollments: 1, completions: 1 });
+
     const audit = await owner.ok('GET', `/api/communities/${communityId}/audit`);
     const actions = audit.events.map((e: { action: string }) => e.action);
     expect(actions).toEqual(expect.arrayContaining(['submission.review', 'completion.create', 'credential.issue']));
