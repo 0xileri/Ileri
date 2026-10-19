@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "orbio": {
+      "source": {
+        "source": "github",
+        "repo": "orbioso/orbio-plugin"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "orbio@orbio": true
+  }
+}
